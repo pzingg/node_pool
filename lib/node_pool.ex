@@ -51,19 +51,24 @@ defmodule NodePool do
   The function is synchronous and all the nodes, and all the system servers, are
   running when it returns a value.
 
-  slave_nodes - A list of the long names (atoms) of nodes that will be attached
-    (and possibly started) when pool is initialized.
-
-  opts - Options (new to the Elixir version).
-    :include_master - if true, include Node.self() in the pool
+  arg - A Keyword list (new to the Elixir version).
+    :slave_nodes - optional list of the long names (atoms) of nodes that will be
+      attached (and possibly started) when pool is initialized.
+    :include_master - if true, include Node.self() in the pool (default false)
+    :no_start - if true, do not attempt to start nodes as they are attached (default false)
+    :no_stats - if true, no statistics are collected (useful for tests) (default false)
     :start_args - optional string of command line args for :slave.start_link
-    :no_start - if true, do not attempt to start nodes as they are attached
-    :no_stats - if true, no statistics are collected (useful for tests)
     :on_attach - optional {module, func} tuple that specifies a 1-arity function
-      which takes the node longname, to be called when the node is attached to the pool
+
+  These keywords can be used in an Application module, to start this module, like this:
+
+  ```
+  children =
+    [{NodePool, [slave_nodes: [:"node1@127.0.0.1"], no_start: true]}]
+  ```
   """
-  def start_link(slave_nodes \\ [], opts \\ []) do
-    GenServer.start_link(__MODULE__, [slave_nodes, opts], name: @global_tuple)
+  def start_link(arg) do
+    GenServer.start_link(__MODULE__, arg, name: @global_tuple)
   end
 
   @spec get_nodes() :: list(node())
@@ -110,8 +115,10 @@ defmodule NodePool do
   # GenServer callbacks
 
   @impl true
-  def init([slave_nodes, opts]) do
+  def init(arg) do
     Process.flag(:trap_exit, true)
+
+    {slave_nodes, opts} = Keyword.pop(arg, :slave_nodes, [])
 
     if !Keyword.get(opts, :no_stats, false) do
       spawn_link(__MODULE__, :statistic_collector, [])
