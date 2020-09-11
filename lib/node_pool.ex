@@ -120,16 +120,13 @@ defmodule NodePool do
 
     {slave_nodes, opts} = Keyword.pop(arg, :slave_nodes, [])
 
-    if !Keyword.get(opts, :no_stats, false) do
-      spawn_link(__MODULE__, :statistic_collector, [])
-    end
-
     nodes =
       if Keyword.get(opts, :include_master, false) do
         slave_nodes ++ [Node.self()]
       else
         slave_nodes
       end
+      |> Enum.uniq()
 
     case nodes do
       [] ->
@@ -215,8 +212,10 @@ defmodule NodePool do
     if :lists.keymember(node, @elem_node, nodes) do
       {:already_attached, nodes}
     else
+      not_master = node != Node.self()
+
       startup =
-        if !Keyword.get(opts, :no_start, false) do
+        if not_master && !Keyword.get(opts, :no_start, false) do
           start_node(node, Keyword.get(opts, :start_args, ""))
         else
           {:ok, node}
@@ -225,7 +224,10 @@ defmodule NodePool do
       case startup do
         {:ok, var_node} ->
           if !Keyword.get(opts, :no_stats, false) do
-            Node.monitor(var_node, true)
+            if not_master do
+              Node.monitor(var_node, true)
+            end
+
             Node.spawn_link(var_node, __MODULE__, :statistic_collector, [])
           end
 
